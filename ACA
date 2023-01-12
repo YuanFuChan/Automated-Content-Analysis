@@ -1,0 +1,109 @@
+############### A test of fitting stm model in lda ############################################# 
+################################################################################################
+
+# load necessary libraries
+library(stm)
+setwd("M:/Documents/Imported filed_CBF")
+
+############### Fitting a stm model with inbreeding environmental dataset #########################
+###################################################################################################
+
+# load the dataset Ibd_TitleAssessment
+InbreeedingLdaAll<-read.csv("Ibd_TitleAssessment032019.csv",header=T)
+names(InbreeedingLdaAll)
+
+library(tm)
+
+# Ecode three columns (Title_assessment, Abstract_assessment and Neaves_assessment) as factors
+InbreeedingLdaAll$Title_assessment<-as.factor(InbreeedingLdaAll$Title_assessment)
+InbreeedingLdaAll$Abstract_assessment<-as.factor(InbreeedingLdaAll$Abstract_assessment)
+InbreeedingLdaAll$Neaves_assessment<-as.factor(InbreeedingLdaAll$Neaves_assessment)
+
+
+Ibd_proc<-textProcessor(InbreeedingLdaAll$Abstract,metadata = InbreeedingLdaAll)
+Ibd_out<-prepDocuments(Ibd_proc$documents,Ibd_proc$vocab,Ibd_proc$meta,lower.thresh = 25)
+
+Ibd_fit<-stm(documents = Ibd_out$documents,vocab=Ibd_out$vocab,K=25,prevalence = ~Neaves_assessment,data=Ibd_out$meta)
+
+str(Ibd_out$meta)
+Ibd_prep<-estimateEffect(1:25~Neaves_assessment,Ibd_fit,meta=Ibd_out$meta)
+summary(Ibd_prep)
+
+############### Export the number of documents by number of topic ###############################
+############### matrix of topic proportions to csv file #########################################
+
+str(Ibd_fit$theta)
+Ibd_Matrix<-as.data.frame(Ibd_fit$theta)
+write.csv(Ibd_Matrix,file="M:/Documents/Matrix2.csv")
+LDA_matrix<-data.frame(Ibd_Matrix, InbreeedingLdaAll)
+names(LDA_matrix)
+write.csv(LDA_matrix,file="M:/Documents/Ibd_training.csv")
+
+############### Fitting lda model with training and testing data ################################
+################Topic with positive relationship#################################################
+
+Ibd_Lda_training<-read.csv("Ibd_training.csv",header=T)
+Ibd_Lda_testing<-read.csv("Ibd_testing.csv",header=T)
+names(Ibd_Lda_training)
+names(Ibd_Lda_testing)
+
+Ibd_Lda_training$Neaves_assessment<-as.factor(Ibd_Lda_training$Neaves_assessment)
+Ibd_Lda_training$Abstract_assessment<-as.factor(Ibd_Lda_training$Abstract_assessment)
+
+Ibd_Lda_testing$Neaves_assessment<-as.factor(Ibd_Lda_testing$Neaves_assessment)
+Ibd_Lda_testing$Abstract_assessment<-as.factor(Ibd_Lda_testing$Abstract_assessment)
+
+library(MASS)
+Ibd_lda<-lda(Neaves_assessment~V2+V3+V4+V6+V7+V8+V9+V10+V11+V12+V13+V14+V15+V20+V21+V22+V23+V25,CV=FALSE,data=Ibd_Lda_training)
+
+Ibd_ldaP<-lda(Neaves_assessment~V6+V14+V15+V20+V21+V25,CV=FALSE,data=Ibd_Lda_training)
+Ibd_ldaN<-lda(Neaves_assessment~V2+V3+V4+V7+V8+V9+V10+V11+V12+V13+V22+V23,CV=FALSE,data=Ibd_Lda_training)
+
+LDAResults<-predict(Ibd_lda,Ibd_Lda_testing)$class
+
+LDAResultsP<-predict(Ibd_ldaP,Ibd_Lda_testing)$class
+LDAResultsN<-predict(Ibd_ldaN,Ibd_Lda_testing)$class
+
+names(Ibd_lda)
+tab <- table(Ibd_lda$class, Ibd_Lda_training$Abstract_assessment)
+1 - sum(tab[row(tab)==col(tab)])/sum(tab)
+
+################################# Plotting lda result ########################################################### 
+################### Extract first 3 canonical variates ###########################################
+
+Ibd_fit<-as.data.frame(predict(Ibd_lda,Ibd_Lda_testing))
+Ibd_cvs<-as.data.frame(Ibd_fit$LD1)
+
+c1 <- rgb(173,216,230,max = 255, alpha = 80, names = "lt.blue")
+c2 <- rgb(255,192,203, max = 255, alpha = 80, names = "lt.pink")
+
+hist(Ibd_fit0$LD1,xlim=c(-4,5),ylim = c(0,5500),col=c1)
+hist(Ibd_fit0$LD1)
+hist(Ibd_fit1$LD1, add=TRUE,col=c2)
+
+boxplot(Ibd_fit$LD1~Ibd_fit$class,boxwex=.4,col=c('powderblue', 'mistyrose'), ylab="LD1",xlab="Relevancy")
+
+
+######## Extract articles without assessment ########
+######## in original spreadsheet to combine  ########
+######## with lda results ###########################
+
+updateIbd_all<-subset(InbreeedingLdaAll,Title_assessment=="N/A" & Abstract_assessment=="N/A")
+
+######## Convert lda result to matrix ########
+
+LDAtable<-as.matrix(LDAResults)
+LDAtableP<-as.matrix(LDAResultsP)
+LDAtableN<-as.matrix(LDAResultsN)
+
+######## combine the two objects above into a dataframe ######
+UpdateAssess<-data.frame(Ibd_Lda_testing,LDAtable)
+
+UpdateAssessP<-data.frame(Ibd_Lda_testing,LDAResultsP)
+UpdateAssessN<-data.frame(Ibd_Lda_testing,LDAResultsN)
+
+######## Export a csv file from the dataframe above ##########
+write.csv(UpdateAssess,file="M:/Documents/Ibd_LDAresults.csv")
+
+write.csv(UpdateAssessP,file="M:/Documents/Ibd_LDAresultsP.csv")
+write.csv(UpdateAssessN,file="M:/Documents/Ibd_LDAresultsN.csv")
